@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hotel-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hotel-app
+  template:
+    metadata:
+      labels:
+        app: hotel-app
+    spec:
+      containers:
+        - name: hotel-app
+          image: hotel-app:1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          env:
+            - name: CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: hotel-secrets
+                  key: CONNECTION_STRING

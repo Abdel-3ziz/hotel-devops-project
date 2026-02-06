@@ -1,0 +1,48 @@
+pipeline {
+  agent any
+
+  environment {
+    APP_NAME = "hotel-app"
+    K8S_NS   = "default"
+    IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.take(7)}"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Build Image') {
+      steps {
+        dir('Hotel') {
+          sh """
+            docker build -t ${APP_NAME}:${IMAGE_TAG} .
+          """
+        }
+      }
+    }
+
+    stage('Deploy to K8s (Local)') {
+      steps {
+        sh """
+          kubectl apply -f k8s/secret.yaml
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
+
+          # update image in deployment
+          kubectl set image deployment/hotel-app hotel-app=${APP_NAME}:${IMAGE_TAG} --record
+          kubectl rollout status deployment/hotel-app --timeout=120s
+        """
+      }
+    }
+  }
+
+  post {
+    always {
+      sh "kubectl get pods -o wide || true"
+      sh "docker images | head -n 20 || true"
+    }
+  }
+}
