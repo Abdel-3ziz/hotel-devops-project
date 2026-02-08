@@ -2,10 +2,10 @@ pipeline {
   agent any
 
   environment {
-    // For pushing from inside dind (Jenkins network)
+    // Push from inside Jenkins network
     PUSH_REGISTRY = "registry:5000"
 
-    // For Kubernetes pull on Docker Desktop (the one that worked for you)
+    // Pull from Docker Desktop K8s node
     K8S_REGISTRY  = "localhost:5000"
 
     APP_NAME   = "hotel-app"
@@ -25,17 +25,15 @@ pipeline {
         dir('Hotel') {
           sh '''
             docker build -t $PUSH_IMAGE .
-            docker tag $PUSH_IMAGE $K8S_IMAGE
           '''
         }
       }
     }
 
-    stage('Push to Registry') {
+    stage('Push to Registry (once)') {
       steps {
         sh '''
           docker push $PUSH_IMAGE
-          docker push $K8S_IMAGE
         '''
       }
     }
