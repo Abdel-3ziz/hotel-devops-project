@@ -2,10 +2,10 @@ pipeline {
   agent any
 
   environment {
-    // Push from inside Jenkins network
+    // Push from inside Jenkins network (dind)
     PUSH_REGISTRY = "registry:5000"
 
-    // Pull from Docker Desktop K8s node
+    // Pull from Docker Desktop Kubernetes
     K8S_REGISTRY  = "localhost:5000"
 
     APP_NAME   = "hotel-app"
@@ -24,7 +24,8 @@ pipeline {
       steps {
         dir('Hotel') {
           sh '''
-            docker build -t $PUSH_IMAGE .
+            set -eux
+            docker build -t "$PUSH_IMAGE" .
           '''
         }
       }
@@ -33,7 +34,8 @@ pipeline {
     stage('Push to Registry (once)') {
       steps {
         sh '''
-          docker push $PUSH_IMAGE
+          set -eux
+          docker push "$PUSH_IMAGE"
         '''
       }
     }
@@ -42,13 +44,29 @@ pipeline {
       steps {
         dir('Hotel') {
           sh '''
-            kubectl apply -f k8s/
-            kubectl set image deploy/hotel-app hotel-app=$K8S_IMAGE
+            set -eux
+
+            # Apply manifests without fetching OpenAPI schema (avoids auth/redirect validation error)
+            kubectl apply -f k8s/ --validate=false
+
+            # Update deployment image
+            kubectl set image deploy/hotel-app hotel-app="$K8S_IMAGE"
+
+            # Wait rollout & show status
             kubectl rollout status deploy/hotel-app --timeout=180s
             kubectl get pods -o wide
           '''
         }
       }
+    }
+  }
+
+  post {
+    always {
+      sh '''
+        kubectl get deploy -o wide 2>/dev/null || true
+        kubectl get pods -o wide 2>/dev/null || true
+      '''
     }
   }
 }
