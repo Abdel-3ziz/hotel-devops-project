@@ -2,47 +2,47 @@ pipeline {
   agent any
 
   environment {
-    APP_NAME = "hotel-app"
-    K8S_NS   = "default"
-    IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.take(7)}"
+    REGISTRY   = "localhost:5000"
+    APP_NAME   = "hotel-app"
+    IMAGE_TAG  = "${BUILD_NUMBER}-${GIT_COMMIT.take(7)}"
+    FULL_IMAGE = "${REGISTRY}/${APP_NAME}:${IMAGE_TAG}"
   }
 
   stages {
     stage('Checkout') {
-      steps {
-        checkout scm
-      }
+      steps { checkout scm }
     }
 
     stage('Build Image') {
       steps {
         dir('Hotel') {
-          sh """
-            docker build -t ${APP_NAME}:${IMAGE_TAG} .
-          """
+          sh 'docker build -t $FULL_IMAGE .'
         }
       }
     }
 
-    stage('Deploy to K8s (Local)') {
+    stage('Push to Local Registry') {
       steps {
-        sh """
-          kubectl apply -f k8s/secret.yaml
-          kubectl apply -f k8s/deployment.yaml
-          kubectl apply -f k8s/service.yaml
-
-          # update image in deployment
-          kubectl set image deployment/hotel-app hotel-app=${APP_NAME}:${IMAGE_TAG} --record
-          kubectl rollout status deployment/hotel-app --timeout=120s
-        """
+        sh 'docker push $FULL_IMAGE'
       }
     }
-  }
 
-  post {
-    always {
-      sh "kubectl get pods -o wide || true"
-      sh "docker images | head -n 20 || true"
+    stage('Deploy to K8s') {
+      steps {
+        dir('Hotel') {
+          sh '''
+            # apply manifests (secrets/svc/deploy)
+            kubectl apply -f k8s/
+
+            # update deployment image to the new tag
+            kubectl set image deploy/hotel-app hotel-app=$FULL_IMAGE
+
+            kubectl rollout status deploy/hotel-app --timeout=180s
+            kubectl get pods -o wide
+            kubectl get svc -o wide || true
+          '''
+        }
+      }
     }
   }
 }
