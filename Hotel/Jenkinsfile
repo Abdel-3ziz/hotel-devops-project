@@ -2,10 +2,17 @@ pipeline {
   agent any
 
   environment {
-    REGISTRY   = "localhost:5000"
+    // For pushing from inside dind (Jenkins network)
+    PUSH_REGISTRY = "registry:5000"
+
+    // For Kubernetes pull on Docker Desktop (the one that worked for you)
+    K8S_REGISTRY  = "localhost:5000"
+
     APP_NAME   = "hotel-app"
     IMAGE_TAG  = "${BUILD_NUMBER}-${GIT_COMMIT.take(7)}"
-    FULL_IMAGE = "${REGISTRY}/${APP_NAME}:${IMAGE_TAG}"
+
+    PUSH_IMAGE = "${PUSH_REGISTRY}/${APP_NAME}:${IMAGE_TAG}"
+    K8S_IMAGE  = "${K8S_REGISTRY}/${APP_NAME}:${IMAGE_TAG}"
   }
 
   stages {
@@ -16,14 +23,20 @@ pipeline {
     stage('Build Image') {
       steps {
         dir('Hotel') {
-          sh 'docker build -t $FULL_IMAGE .'
+          sh '''
+            docker build -t $PUSH_IMAGE .
+            docker tag $PUSH_IMAGE $K8S_IMAGE
+          '''
         }
       }
     }
 
-    stage('Push to Local Registry') {
+    stage('Push to Registry') {
       steps {
-        sh 'docker push $FULL_IMAGE'
+        sh '''
+          docker push $PUSH_IMAGE
+          docker push $K8S_IMAGE
+        '''
       }
     }
 
@@ -31,15 +44,10 @@ pipeline {
       steps {
         dir('Hotel') {
           sh '''
-            # apply manifests (secrets/svc/deploy)
             kubectl apply -f k8s/
-
-            # update deployment image to the new tag
-            kubectl set image deploy/hotel-app hotel-app=$FULL_IMAGE
-
+            kubectl set image deploy/hotel-app hotel-app=$K8S_IMAGE
             kubectl rollout status deploy/hotel-app --timeout=180s
             kubectl get pods -o wide
-            kubectl get svc -o wide || true
           '''
         }
       }
