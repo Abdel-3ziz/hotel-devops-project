@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
         - name: hotel-app
-          image: hotel-app:1.0
-          imagePullPolicy: IfNotPresent
+          image: IMAGE_PLACEHOLDER
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
           env:
